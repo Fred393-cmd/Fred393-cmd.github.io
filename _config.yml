@@ -1,0 +1,26 @@
+title: "傅航的技术博客"
+description: "大数据分析 | PySpark | 机器学习"
+author: "傅航"
+email: ""
+baseurl: ""
+url: ""
+
+# 主题
+theme: minima
+
+# 构建设置
+markdown: kramdown
+highlighter: rouge
+permalink: /:year/:month/:day/:title/
+
+# 插件
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
+
+# 排除文件
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - README_Deployment.md
+  - "*.ipynb"

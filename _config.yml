@@ -13,6 +13,11 @@ markdown: kramdown
 highlighter: rouge
 permalink: /:year/:month/:day/:title/
 
+# kramdown 数学公式支持
+kramdown:
+  math_engine: mathjax
+  math_engine_opts: {}
+
 # 插件
 plugins:
   - jekyll-feed

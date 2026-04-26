@@ -1,9 +1,9 @@
 ---
 layout: post
-title: "AFT 生存回归分析：电信客户流失预测"
+title: "生存分析：电信客户流失预测（KM + Cox + AFT + CLV）"
 date: 2026-04-20 00:00:00 +0800
-categories: [大数据, PySpark, 生存分析]
-tags: [AFT, Spark, MLlib, Churn]
+categories: [大数据, 生存分析]
+tags: [lifelines, KaplanMeier, Cox, AFT, Churn, CLV]
 author: 傅航
 ---
 
@@ -11,9 +11,9 @@ author: 傅航
 
 **学生姓名：** 傅航  
 **学号：** 12310527  
-**提交日期：** 2026年4月20日  
-**模型：** AFT (Accelerated Failure Time) Survival Regression  
-**数据集：** Telco Customer Churn
+**提交日期：** 2026年4月26日  
+**数据集：** IBM Telco Customer Churn  
+**分析方法：** Kaplan-Meier、Cox 比例风险模型、AFT 模型、CLV 计算
 
 ---
 
@@ -21,110 +21,149 @@ author: 傅航
 
 客户流失（Churn）预测是电信行业的核心业务问题。传统分类模型（如逻辑回归）只能预测"是否流失"，而**生存分析**能进一步回答"何时流失"，为客户保留策略提供时间维度的洞察。
 
-本实验采用 **AFT（加速失效时间）模型**，以客户在网时长（`tenure`）为生存时间，以流失事件（`Churn=1`）为终点事件，分析合同类型、月费、技术支持等因素对客户生存时间的影响。
+本实验基于 [Databricks Survival Analysis Solution Accelerator](https://github.com/databricks-industry-solutions/survival-analysis) 教程，使用 `lifelines` 库实现三种生存分析方法：
+
+1. **Kaplan-Meier**：非参数方法，估计生存概率曲线
+2. **Cox 比例风险模型**：半参数方法，多变量分析
+3. **AFT（加速失效时间）模型**：全参数方法，直接建模生存时间
+4. **CLV（客户生命周期价值）**：基于 Cox 生存概率的 NPV 计算
 
 ---
 
-## 2. 方法论：AFT 模型原理
+## 2. 数据集说明
 
-### 2.1 模型定义
-
-AFT 模型对生存时间的对数建立线性回归：
-
-$$\log(T) = \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \cdots + \beta_n X_n + \sigma \varepsilon$$
-
-其中：
-- $T$：生存时间（客户在网月数）
-- $X_i$：协变量（合同类型、月费等）
-- $\beta_i$：回归系数（**加速因子**）
-- $\sigma$：尺度参数
-- $\varepsilon$：误差项（服从 Weibull 分布）
-
-### 2.2 截尾数据处理
-
-生存分析的核心挑战是**右截尾（Right Censoring）**：部分客户在观测期结束时仍未流失，其真实流失时间未知。AFT 模型通过 `censor` 列处理此问题：
-
-| censor 值 | 含义 |
-|-----------|------|
-| `1.0` | 事件已发生（客户已流失），观测完整 |
-| `0.0` | 右截尾（客户仍在网），观测不完整 |
-
-### 2.3 系数解读
-
-- **系数 > 0**：该特征增大时，预期生存时间**延长**（降低流失风险）
-- **系数 < 0**：该特征增大时，预期生存时间**缩短**（加速流失）
+- **数据集名称**：IBM Telco Customer Churn
+- **原始记录数**：7,043 条，21 列
+- **筛选条件**：Month-to-month 合同 + 有互联网服务
+- **Silver 表记录数**：3,351 条
+- **流失率**：46.43%
+- **生存时间（tenure）**：客户在网月数（1–72 个月）
 
 ---
 
-## 3. 数据预处理流程
+## 3. 方法论
 
-### 3.1 特征工程
+### 3.1 Kaplan-Meier 估计
 
-| 步骤 | 操作 | 工具 |
-|------|------|------|
-| 类别编码 | `Contract` → `ContractIndex` | `StringIndexer` |
-| 类别编码 | `TechSupport` → `TechSupportIndex` | `StringIndexer` |
-| 特征向量化 | 三列合并为 `features` 向量 | `VectorAssembler` |
-| 标签创建 | `tenure` → `label`（生存时间） | `withColumn` |
-| 截尾标志 | `Churn` → `censor`（0/1） | `withColumn` |
+非参数方法，直接从观测数据估计生存函数：
 
-### 3.2 数据集划分
+$$S(t) = P(T > t)$$
 
-按 80/20 比例随机划分训练集与测试集（`seed=42`）。
+使用 Log-rank 检验判断不同组之间的生存曲线是否有显著差异。
 
----
+### 3.2 Cox 比例风险模型
 
-## 4. 实验结果与分析
+半参数模型，对风险函数建模：
 
-### 4.1 模型参数
+$$h(t|X) = h_0(t) \cdot \exp(\beta_1 X_1 + \cdots + \beta_n X_n)$$
 
-| 参数 | 值 | 说明 |
-|------|----|------|
-| Intercept | ~3.8 | 基准对数生存时间 |
-| β(ContractIndex) | **+0.72** | 合同期越长，生存时间越长 |
-| β(MonthlyCharges) | **-0.031** | 月费越高，流失越快 |
-| β(TechSupportIndex) | **+0.45** | 有技术支持，生存时间更长 |
-| Scale (σ) | ~0.85 | Weibull 分布尺度参数 |
+- $$\exp(\beta) > 1$$：增加流失风险
+- $$\exp(\beta) < 1$$：降低流失风险
 
-### 4.2 关键发现
+### 3.3 AFT 模型（Log-Logistic）
 
-**发现 1：合同类型是最强的保留因素**
+全参数模型，对生存时间的对数建立线性回归：
 
-`ContractIndex` 系数为正且绝对值最大。从 Month-to-month（索引=0）升级到 Two year（索引=2），预期生存时间约延长 $e^{0.72 \times 2} \approx 4.2$ 倍。
+$$\log(T) = \beta_0 + \beta_1 X_1 + \cdots + \beta_n X_n + \sigma \varepsilon$$
 
-**发现 2：月费对流失有显著加速效应**
-
-`MonthlyCharges` 系数为负（约 -0.031）。月费每增加 $10，预期生存时间缩短约 $e^{-0.31} \approx 27\%$。
-
-**发现 3：技术支持提升客户粘性**
-
-`TechSupportIndex` 系数为正（约 +0.45），表明提供技术支持的客户预期在网时间更长。
-
-### 4.3 分位数预测解读
-
-模型输出三个分位数预测 `[Q10, Q50, Q90]`，以一个 Month-to-month 高月费客户为例：
-
-```
-predictedQuantiles = [1.8, 4.5, 11.2]
-```
-
-- 该客户有 10% 概率在 **1.8 个月内**流失
-- 有 50% 概率在 **4.5 个月内**流失（中位生存时间）
-- 有 90% 概率在 **11.2 个月内**流失
+- $$\beta > 0$$：延长生存时间
+- $$\beta < 0$$：缩短生存时间
 
 ---
 
-## 5. 结论与业务建议
+## 4. 实验结果
 
-| 结论 | 业务建议 |
-|------|---------|
-| 长期合同显著延长生存时间 | 推出合同升级激励计划（如折扣、赠品） |
-| 高月费加速流失 | 对高月费客户主动推送套餐优化方案 |
-| 技术支持提升粘性 | 将技术支持作为标准服务捆绑销售 |
-| 分位数预测提供时间窗口 | 在 Q10 时间点前触发自动保留流程 |
+### 4.1 Kaplan-Meier 分析
 
-AFT 模型相比 Cox 比例风险模型的优势在于：它直接对生存时间建模，系数具有直观的"时间加速/减速"解释，更适合业务人员理解和使用。
+![KM Population Curve](../../../km_population.png)
+
+**中位生存时间：34 个月**（50% 的月付费客户在 34 个月内流失）
+
+Log-rank 检验结果（部分）：
+
+| 协变量 | p 值 | 显著性 |
+|--------|------|--------|
+| `gender` | 0.7232 | ns |
+| `partner` | < 0.001 | *** |
+| `dependents` | < 0.001 | *** |
+| `internetService` | < 0.001 | *** |
+| `onlineBackup` | < 0.001 | *** |
+| `techSupport` | < 0.001 | *** |
+| `paymentMethod` | 0.8041 | ns |
 
 ---
 
-*图表参考：`aft_survival_analysis.png`（合同类型生存时间分布 & 月费散点图）*
+### 4.2 Cox 比例风险模型
+
+- **Concordance Index**：0.64
+- **Partial AIC**：22639.90
+
+| 协变量 | coef | exp(coef) | p 值 | 解读 |
+|--------|------|-----------|------|------|
+| `dependents_Yes` | -0.33 | 0.72 | <0.005 | 流失风险降低 28% |
+| `internetService_DSL` | -0.22 | 0.80 | <0.005 | 流失风险降低 20% |
+| `onlineBackup_Yes` | -0.78 | 0.46 | <0.005 | 流失风险降低 54% |
+| `techSupport_Yes` | -0.64 | 0.53 | <0.005 | 流失风险降低 47% |
+
+所有系数均为负值且高度显著，表明这些因素都能显著降低流失风险。
+
+---
+
+### 4.3 AFT 模型（Log-Logistic）
+
+- **Concordance Index**：0.73（优于 Cox 的 0.64）
+- **AIC**：13698.72
+- **中位生存时间**：135.51 个月
+
+关键系数（alpha_ 参数，均为正值，表示延长生存时间）：
+
+| 协变量 | coef | exp(coef) |
+|--------|------|-----------|
+| `onlineSecurity_Yes` | 0.86 | 2.37 |
+| `onlineBackup_Yes` | 0.81 | 2.25 |
+| `paymentMethod_Credit card (automatic)` | 0.80 | 2.22 |
+| `multipleLines_Yes` | 0.66 | 1.94 |
+| `techSupport_Yes` | 0.69 | 1.99 |
+| `partner_Yes` | 0.68 | 1.97 |
+| `internetService_DSL` | 0.38 | 1.47 |
+
+---
+
+### 4.4 客户生命周期价值（CLV）
+
+**假设场景：** 有技术支持、DSL 互联网、有在线备份，月利润 $30，IRR 10%（年化）
+
+| 时间周期 | 累计净现值（NPV） |
+|----------|-------------------|
+| 12 个月 | $320.30 |
+| 24 个月 | $589.49 |
+| 36 个月 | $818.84 |
+
+---
+
+## 5. 模型对比
+
+| 模型 | 类型 | Concordance | 优点 | 缺点 |
+|------|------|-------------|------|------|
+| Kaplan-Meier | 非参数 | — | 无分布假设，直观 | 仅单变量分析 |
+| Cox PH | 半参数 | 0.64 | 多变量分析，无需指定基线风险 | 依赖比例风险假设 |
+| AFT (Log-Logistic) | 全参数 | 0.73 | 系数解读直观，预测性能最佳 | 需要指定分布形式 |
+
+**结论：** AFT 模型在本数据集上表现最佳（Concordance = 0.73），且系数解读更符合业务直觉。
+
+---
+
+## 6. 业务建议
+
+1. **增值服务捆绑**：在线安全、技术支持、在线备份是降低流失的关键因素，建议作为标准套餐
+2. **DSL vs Fiber 优化**：DSL 客户流失风险更低，需调查 Fiber optic 高流失率的原因
+3. **留存时间窗口**：在客户在网 20–30 个月时（接近中位生存时间）实施保留计划
+4. **CLV 驱动定价**：根据客户特征预测 CLV，指导营销预算分配（CAC 上限 = CLV）
+
+---
+
+## 7. 参考资料
+
+1. [Databricks Survival Analysis Solution Accelerator](https://github.com/databricks-industry-solutions/survival-analysis)
+2. [Lifelines Documentation](https://lifelines.readthedocs.io/)
+3. IBM Telco Customer Churn Dataset

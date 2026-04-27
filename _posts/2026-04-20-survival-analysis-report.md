@@ -57,8 +57,8 @@ $$S(t) = P(T > t)$$
 
 $$h(t|X) = h_0(t) \cdot \exp(\beta_1 X_1 + \cdots + \beta_n X_n)$$
 
-- $$\exp(\beta) > 1$$：增加流失风险
-- $$\exp(\beta) < 1$$：降低流失风险
+- $\exp(\beta) > 1$：增加流失风险
+- $\exp(\beta) < 1$：降低流失风险
 
 ### 3.3 AFT 模型（Log-Logistic）
 
@@ -66,8 +66,8 @@ $$h(t|X) = h_0(t) \cdot \exp(\beta_1 X_1 + \cdots + \beta_n X_n)$$
 
 $$\log(T) = \beta_0 + \beta_1 X_1 + \cdots + \beta_n X_n + \sigma \varepsilon$$
 
-- $$\beta > 0$$：延长生存时间
-- $$\beta < 0$$：缩短生存时间
+- $\beta > 0$：延长生存时间
+- $\beta < 0$：缩短生存时间
 
 ---
 
@@ -75,9 +75,13 @@ $$\log(T) = \beta_0 + \beta_1 X_1 + \cdots + \beta_n X_n + \sigma \varepsilon$$
 
 ### 4.1 Kaplan-Meier 分析
 
-![KM Population Curve](../../../km_population.png)
+![KM 总体生存曲线](../assets/images/km_population.png)
 
 **中位生存时间：34 个月**（50% 的月付费客户在 34 个月内流失）
+
+![KM 性别分组](../assets/images/km_gender.png)
+
+![KM 在线安全服务分组](../assets/images/km_onlineSecurity.png)
 
 Log-rank 检验结果（部分）：
 
@@ -95,6 +99,8 @@ Log-rank 检验结果（部分）：
 
 ### 4.2 Cox 比例风险模型
 
+![Cox 风险比图](../assets/images/cph_hazard_ratios.png)
+
 - **Concordance Index**：0.64
 - **Partial AIC**：22639.90
 
@@ -107,9 +113,13 @@ Log-rank 检验结果（部分）：
 
 所有系数均为负值且高度显著，表明这些因素都能显著降低流失风险。
 
+![Cox Log-log 假设检验图](../assets/images/cph_loglog_plots.png)
+
 ---
 
 ### 4.3 AFT 模型（Log-Logistic）
+
+![AFT 系数图](../assets/images/aft_coefficients.png)
 
 - **Concordance Index**：0.73（优于 Cox 的 0.64）
 - **AIC**：13698.72
@@ -127,11 +137,15 @@ Log-rank 检验结果（部分）：
 | `partner_Yes` | 0.68 | 1.97 |
 | `internetService_DSL` | 0.38 | 1.47 |
 
+![AFT Log-odds 假设检验图](../assets/images/aft_logodds_plots.png)
+
 ---
 
 ### 4.4 客户生命周期价值（CLV）
 
 **假设场景：** 有技术支持、DSL 互联网、有在线备份，月利润 $30，IRR 10%（年化）
+
+![CLV 可视化](../assets/images/clv_visualization.png)
 
 | 时间周期 | 累计净现值（NPV） |
 |----------|-------------------|

@@ -11,12 +11,11 @@ theme: minima
 # 构建设置
 markdown: kramdown
 highlighter: rouge
-permalink: /:year/:month/:day/:title/
+permalink: /:title/
 
 # kramdown 数学公式支持
 kramdown:
-  math_engine: mathjax
-  math_engine_opts: {}
+  math_engine: null
 
 # 插件
 plugins:
